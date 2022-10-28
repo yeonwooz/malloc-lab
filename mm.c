@@ -33,13 +33,33 @@ team_t team = {
 };
 
 /* single word (4) or double word (8) alignment */
-#define ALIGNMENT 8
+
+#define WSIZE 4                 // 워드, 헤더/푸터 사이즈(바이트)
+#define DSIZE WSIZE * 2         // 더블 워드 사이즈(바이트)
+#define ALIGNMENT DSIZE         // 더블 워드 얼라인 사용하기 위해 얼라인먼트 사이즈를 더블로 정의
+#define CHUNKSIZE (1<<12)       // 한번에 늘릴 힙사이즈 (바이트)
 
 /* rounds up to the nearest multiple of ALIGNMENT */
+
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
-
-
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+
+/* 매크로 함수 */
+
+#define MAX(x, y) (x > y ? x : y)
+#define PACK(size, alloc) (size | alloc)
+
+#define GET(p) (*(unsigned int *)(p))
+#define PUT(p, val) (*(unsigned int *)(p) = val)
+
+#define GET_SIZE(p) (GET(p) & ~0x7)
+#define GET_ALLOC(p) (GET(p) & 0x1)
+
+#define HDRP(bp) ((char *)(bp) - WSIZE)
+#define FTRP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
+
+#define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
+#define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
 /* 
  * mm_init - initialize the malloc package.
