@@ -66,7 +66,8 @@ team_t team = {
  */
 
 static void *extend_heap(size_t words);
-
+static void place(void *bp, size_t asize);   // TODO : 구현
+static void *find_fit(size_t asize);         // TODO: 구현
 static char *heap_listp = 0;  //첫번째 블록 영역의 포인터 
 
 int mm_init(void)
@@ -111,13 +112,33 @@ static void *extend_heap(size_t words)
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
+    if (size == 0)
+    {
+        return NULL;
+    }    
+    size_t extendedsize;
+    char *bp;      
+
+    int newsize = ALIGN(size + SIZE_T_SIZE);   // 인자로 받은 사이즈를 얼라인에 맞추어서 필요한 사이즈공간 결정. 더블얼라인에 맞추므로 8의 배수로 충분하도록. 
+
     void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
-	return NULL;
+    if (p == (void *)-1)    // mem_sbrk fail 인 경우
+	    return NULL;
     else {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
+        *(size_t *)p = size;    // size_t 포인터자료형인 p의 값. void* 라서 형변환해서 표현함. p에 size 담음.
+        bp = (void *)((char *)p + SIZE_T_SIZE);  // bp 는 char * 로 형변환한 p와 얼라인 사이즈를 더한 값을 다시 void 포인터로 형변환한 결과값이다. 
+
+        if ((bp = find_fit(newsize)) != NULL) {
+            // bp에 find_fit 함수의 결과값을 넣고, 그 결과가 NULL인지 비교
+            place(bp, newsize);
+            return bp;
+        }
+        extendedsize = MAX(newsize, CHUNKSIZE);
+        if ((bp = extend_heap(extendedsize/WSIZE)) == NULL) {
+            return NULL;
+        }
+        place(bp, newsize);
+        return bp;
     }
 }
 
