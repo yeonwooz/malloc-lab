@@ -23,16 +23,13 @@
  * provide your team information in the following struct.
  ********************************************************/
 team_t team = {
-    /* Team name */
-    "ateam",
-    /* First member's full name */
-    "Harry Bovik",
-    /* First member's email address */
-    "bovik@cs.cmu.edu",
-    /* Second member's full name (leave blank if none) */
-    "",
-    /* Second member's email address (leave blank if none) */
-    ""
+    "team7",
+    "Suyeon Woo",
+    "woosean999@gmail.com",
+    "Rigyeong Hong",
+    "ghdflrud96@gmail.com",
+    "Jinseob Kim",
+    "jinseob.kim91@gmail.com",
 };
 
 /* single word (4) or double word (8) alignment */
@@ -49,6 +46,7 @@ team_t team = {
  */
 int mm_init(void)
 {
+
     return 0;
 }
 
