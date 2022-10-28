@@ -26,8 +26,6 @@ team_t team = {
     "team7",
     "Suyeon Woo",
     "woosean999@gmail.com",
-    "Rigyeong Hong",
-    "ghdflrud96@gmail.com",
     "Jinseob Kim",
     "jinseob.kim91@gmail.com",
 };
@@ -66,8 +64,9 @@ team_t team = {
  */
 
 static void *extend_heap(size_t words);
-static void place(void *bp, size_t asize);   // TODO : 구현
-static void *find_fit(size_t asize);         // TODO: 구현
+static void place(void *bp, size_t asize);
+static void *find_fit(size_t asize);         
+static void *coalesce(void *bp);
 static char *heap_listp = 0;  //첫번째 블록 영역의 포인터 
 
 int mm_init(void)
@@ -163,8 +162,8 @@ static void place(void *bp, size_t asize)
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
-        PUT(HDRP(bp), PACK(csize-asize, 1));
-        PUT(FTRP(bp), PACK(csize-asize, 1));
+        PUT(HDRP(bp), PACK((csize-asize), 1));
+        PUT(FTRP(bp), PACK((csize-asize), 1));
     }
     else {
         PUT(HDRP(bp), PACK(csize, 1));
