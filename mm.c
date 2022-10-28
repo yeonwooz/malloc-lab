@@ -64,10 +64,45 @@ team_t team = {
 /* 
  * mm_init - initialize the malloc package.
  */
+
+static void *extend_heap(size_t words);
+
+static char *heap_listp = 0;  //첫번째 블록 영역의 포인터 
+
 int mm_init(void)
 {
+    // 최초 힙 생성
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1) //line:vm:mm:begininit
+	    return -1;
+    PUT(heap_listp, 0);                          // 얼라인먼트 패딩
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); // 프롤로그 헤더
+    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); // 프롤로그 푸터
+    PUT(heap_listp + (3*WSIZE), PACK(0, 1));     // 에필로그 헤더
+    heap_listp += (2*WSIZE);                     
 
+    if (extend_heap(CHUNKSIZE/WSIZE) == NULL) 
+	    return -1;
     return 0;
+}
+
+/* $begin mmextendheap */
+static void *extend_heap(size_t words) 
+{
+    char *bp;
+    size_t size;
+
+    // 더블 얼라인을 위해 짝수 홀수 분기 
+    size = (words % 2) ? (words+1) * WSIZE : words * WSIZE;
+    if ((long)(bp = mem_sbrk(size)) == -1)  
+	    return NULL;                                    
+
+    // 가용 블록 헤더, 푸터, 에필로그 헤더 초기화
+    PUT(HDRP(bp), PACK(size, 0));         // 헤더
+    PUT(FTRP(bp), PACK(size, 0));         // 푸터
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); // 에필로그 헤더
+
+    // 이전 블록이 free라면 인접블록(이전 & 현재) 연결
+    return coalesce(bp);                                         
 }
 
 /* 
