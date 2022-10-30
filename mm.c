@@ -15,7 +15,7 @@
 /*
  * If NEXT_FIT defined use next fit search, else use first fit search 
  */
-// #define NEXT_FITx
+#define NEXT_FIT
 
 /* $begin mallocmacros */
 /* Basic constants and macros */
