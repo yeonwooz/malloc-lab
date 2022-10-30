@@ -9,6 +9,7 @@
 
 - [x] segment list (doubly-linked list)
 
+- [] Look up traces 
 
 ---
 
