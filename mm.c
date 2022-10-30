@@ -1,5 +1,5 @@
 /*
- * mm.c - Explicit free list based malloc package with first fit placing and real time coalescing.
+ * mm.c - Explicit free list based malloc package with first fit / next fit placing and real time coalescing.
  * 
  * Here the init function initializes the heap with a padding, header and footer.
  * 
@@ -44,6 +44,8 @@ team_t team = {
     "jinseob.kim91@gmail.com",
 };
 
+#define NEXT_FIT
+
 #define ALIGNMENT 8
 #define WSIZE 4 /* rounds up to the nearest multiple of alignment */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
@@ -79,7 +81,11 @@ static void insert_node(void *bp);
   mm_init - initialize the malloc package.
  it returns -1 when error otherwise 0
 */
- 
+
+#ifdef NEXT_FIT
+static char *rover;           /* Next fit rover */
+#endif
+
 int mm_init(void)
 {
     
@@ -98,6 +104,9 @@ int mm_init(void)
     /* Extend empty heap with free block of CHUNKSIZE bytes.
      * Set the head of the free list to the block pointer of the new memory.
      */
+#ifdef NEXT_FIT
+    rover = heap_bottom;
+#endif
     if ((extend_heap(CHUNKSIZE/WSIZE)) == NULL) {
         return -1;
     }
@@ -154,6 +163,12 @@ static void *extend_heap(size_t words) {
         bp = PREV_BLKP(bp);
         insert_node(bp);
     }
+#ifdef NEXT_FIT
+    /* Make sure the rover isn't pointing into the free block */
+    /* that we just coalesced */
+    if ((rover > (char *)bp) && (rover < (char *)NEXT_BLKP(bp))) 
+    rover = bp;
+#endif
     return bp;
 }
 
@@ -237,8 +252,25 @@ void *mm_malloc(size_t size)
 }
 
 static void *find_fit(size_t asize) {
-    
- 
+
+#ifdef NEXT_FIT 
+    /* Next fit search */
+    char *oldrover = rover;
+
+    /* Search from the rover to the end of list */
+    for ( ; GET_SIZE(HDRP(rover)) > 0; rover = NEXT_BLKP(rover))
+	if (!GET_ALLOC(HDRP(rover)) && (asize <= GET_SIZE(HDRP(rover))))
+	    return rover;
+
+    /* search from start of list to old rover */
+    for (rover = heap_bottom; rover < oldrover; rover = NEXT_BLKP(rover))
+	if (!GET_ALLOC(HDRP(rover)) && (asize <= GET_SIZE(HDRP(rover))))
+	    return rover;
+
+    return NULL;  /* no fit found */
+#else 
+/* $begin mmfirstfit */
+    /* First fit search */
     void *bp;
     for(bp = free_list_head; bp != NULL; bp = NEXT_FREE_BLKP(bp)) {
         if(asize <= GET_SIZE(HDRP(bp))) {
@@ -246,7 +278,10 @@ static void *find_fit(size_t asize) {
         }
     }
     //overlap_free_test(bp);
-    return NULL; 
+    return NULL; /* No fit */
+/* $end mmfirstfit */
+#endif    
+
 }
 
 /* Places the requested block and split the excess. Assumes that block
