@@ -1,0 +1,4 @@
+- [x] CSAPP 동적할당기 강의 
+        - basic
+        - advanced
+- [] 모범답안 코드 이해하기 
