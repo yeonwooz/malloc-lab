@@ -68,7 +68,7 @@ team_t team = {
 static char *heap_listp = NULL; // 힙의 프롤로그 블록을 가리키는 정적변수 포인터
 static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정적변수 포인터
 
-#define INSERT_LIFO
+// #define INSERT_LIFO
 
 // #define NEXT_FIT
 
@@ -109,7 +109,7 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), PACK(0, 1));        // epliogue header
 
     heap_listp += + 2*WSIZE; // free_listp를 탐색의 시작점으로 둔다. 
-    free_listp = heap_listp;
+    free_listp = NULL;
 #ifdef NEXT_FIT
     last_bp = heap_listp;
 #endif
@@ -171,7 +171,7 @@ static void* find_fit(size_t asize){
     /* First-fit */
     void* bp;
 
-    for (bp = free_listp; GET_ALLOC(HDRP(bp)) != 1; bp = NEXT_FREEP(bp)){
+    for (bp = free_listp; bp != NULL && GET_ALLOC(HDRP(bp)) != 1; bp = NEXT_FREEP(bp)){
         if(asize <= GET_SIZE(HDRP(bp))){
             return bp;
         }
