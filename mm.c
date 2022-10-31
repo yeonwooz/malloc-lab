@@ -68,7 +68,7 @@ team_t team = {
 static char *heap_listp = NULL; // 힙의 프롤로그 블록을 가리키는 정적변수 포인터
 static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정적변수 포인터
 
-// #define INSERT_LIFO
+#define INSERT_LIFO
 
 // #define NEXT_FIT
 
@@ -300,10 +300,26 @@ void mm_free(void *bp)
 void insert_node(void* bp){
 #ifdef INSERT_LIFO    
     /* LIFO */
-    NEXT_FREEP(bp) = free_listp;
-    PREV_FREEP(bp) = NULL;
-    PREV_FREEP(free_listp) = bp;
-    free_listp = bp;
+    // NEXT_FREEP(bp) = free_listp;
+    // PREV_FREEP(bp) = NULL;
+    // PREV_FREEP(free_listp) = bp;
+    // free_listp = bp;
+
+    void *curr = free_listp;
+    void *saved = curr;
+    void *prev = NULL;
+
+    SET_PREV_FREE(bp, prev);
+    SET_NEXT_FREE(bp, saved);
+    if (prev != NULL) {
+        SET_NEXT_FREE(prev, bp);
+    } else { 
+        free_listp = bp;/* Insert bp before current free list head*/
+    }
+    if (saved != NULL) {
+        SET_PREV_FREE(saved, bp);
+    }
+
 #else
     /* address order */
     void *curr = free_listp;
