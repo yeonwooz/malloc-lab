@@ -4,7 +4,7 @@
  * - Explicit free list based malloc package with first fit / next fit placing and real time coalescing.
  *
  * 명시적 가용리스트를 이중 연결 포인터로 구현.
- * first fit, next fit 각각으로 배치장소를 찾는다. 
+ * next fit 각각으로 배치장소를 찾는다. 
  * free 후 즉시연결을 수행한다.
  *
  */
