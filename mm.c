@@ -70,7 +70,7 @@ static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정�
 
 #define INSERT_LIFO
 
-#define NEXT_FIT
+// #define NEXT_FIT
 
 #ifdef NEXT_FIT
     static char *last_bp;
@@ -96,17 +96,17 @@ void *mm_realloc(void *ptr, size_t size);
 int mm_init(void)
 {
     /* 미사용 패딩, 프롤로그 블록 헤더, 프롤로그 블록 PREV, 프롤로그 블록 NEXT, 프롤로그 블록 푸터,에필로그 푸터 */
-    if ((heap_listp = mem_sbrk(6*WSIZE)) == (void*)-1)
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void*)-1)
         return -1;
 
     // 포인터 위치 지정
     PUT(heap_listp, 0);                             // unused
     PUT(heap_listp + (1*WSIZE), PACK(MINIMUM, 1));  // prologue header => 초기화 과정에서 생성한다. 얼라인 포맷을 위해 사용하고 실제 메모리공간을 사용하지는 않는다.
-    PUT(heap_listp + (2*WSIZE), NULL);              // prologue block PREV =  NULL
-    PUT(heap_listp + (3*WSIZE), NULL);              // prologue block NEXT =  NULL
+    // PUT(heap_listp + (2*WSIZE), NULL);              // prologue block PREV =  NULL
+    // PUT(heap_listp + (3*WSIZE), NULL);              // prologue block NEXT =  NULL
     // => TODO: 메모리 낭비 
-    PUT(heap_listp + (4*WSIZE), PACK(MINIMUM, 1));  // prologue footer
-    PUT(heap_listp + (5*WSIZE), PACK(0, 1));        // epliogue header
+    PUT(heap_listp + (2*WSIZE), PACK(MINIMUM, 1));  // prologue footer
+    PUT(heap_listp + (3*WSIZE), PACK(0, 1));        // epliogue header
 
     heap_listp += + 2*WSIZE; // free_listp를 탐색의 시작점으로 둔다. 
     free_listp = heap_listp;
