@@ -64,7 +64,7 @@ team_t team = {
 static char *heap_listp = NULL; // 힙의 프롤로그 블록을 가리키는 정적변수 포인터
 static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정적변수 포인터
 
-// #define NEXT_FIT
+#define NEXT_FIT
 
 #ifdef NEXT_FIT
     static char *last_bp;
@@ -102,8 +102,8 @@ int mm_init(void)
     PUT(heap_listp + (4*WSIZE), PACK(MINIMUM, 1));  // prologue footer
     PUT(heap_listp + (5*WSIZE), PACK(0, 1));        // epliogue header
 
-    free_listp = heap_listp + 2*WSIZE; // free_listp를 탐색의 시작점으로 둔다. 
-
+    heap_listp += + 2*WSIZE; // free_listp를 탐색의 시작점으로 둔다. 
+    free_listp = heap_listp;
 #ifdef NEXT_FIT
     last_bp = heap_listp;
 #endif
@@ -146,7 +146,7 @@ static void* find_fit(size_t asize){
 
 #ifdef NEXT_FIT
     /* Next-fit */
-    char *oldrover = last_bp;
+    char *old_bp = last_bp;
 
     /* 초기화는 보통 평가문에서 참조할 변수가 없을까봐 넣어주는데, 만약에 전역으로 선언해둔 게 있다면 평가문에서 그걸 참조할 것이므로 첫번째부분을 생략하고 세미콜론만 넣어주면 된다.*/
     
@@ -156,7 +156,7 @@ static void* find_fit(size_t asize){
 	    return last_bp;
 
     /* NEXT FIT SEARCH가 실패하면 다시 힙 앞부터 기존 로버 앞까지 탐색한다 */
-    for (last_bp = heap_listp; last_bp < oldrover; last_bp = SUCC_BLKP(last_bp))
+    for (last_bp = heap_listp; last_bp < old_bp; last_bp = SUCC_BLKP(last_bp))
 	if (!GET_ALLOC(HDRP(last_bp)) && (asize <= GET_SIZE(HDRP(last_bp))))
 	    return last_bp;  // 로버는 마지막으로 탐색한 블록의 포인터이다. (last bp)
 
