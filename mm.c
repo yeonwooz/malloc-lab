@@ -68,6 +68,8 @@ team_t team = {
 static char *heap_listp = NULL; // 힙의 프롤로그 블록을 가리키는 정적변수 포인터
 static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정적변수 포인터
 
+#define INSERT_LIFO
+
 #define NEXT_FIT
 
 #ifdef NEXT_FIT
@@ -79,8 +81,8 @@ static void* extend_heap(size_t words);
 static void* coalesce(void* bp);
 static void* find_fit(size_t asize);
 static void place(void* bp, size_t newsize);
-static void putFreeBlock(void* bp);
-static void removeBlock(void *bp);
+static void insert_node(void* bp);
+static void delete_node(void *bp);
 
 int mm_init(void);
 void *mm_malloc(size_t size);
@@ -189,7 +191,7 @@ static void place(void* bp, size_t asize){
     size_t csize = GET_SIZE(HDRP(bp));
 
     // 할당될 블록이므로 free list에서 없애준다.
-    removeBlock(bp);
+    delete_node(bp);
 
     // 분할이 가능한 경우
     if ((csize - asize) >= (2*DSIZE)){
@@ -201,8 +203,8 @@ static void place(void* bp, size_t asize){
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
 
-        // free list 첫번째에 분할된 블럭을 넣는다.
-        putFreeBlock(bp);
+        // free list 에 분할된 블럭을 넣는다.
+        insert_node(bp);
     }
     else{
         PUT(HDRP(bp), PACK(csize, 1));
@@ -241,7 +243,7 @@ static void* coalesce(void* bp){
 
     // case 2 : 직전 블록 할당, 직후 블록 가용
     if(prev_alloc && !next_alloc){
-        removeBlock(SUCC_BLKP(bp));    // free 상태였던 직후 블록을 free list에서 제거한다.
+        delete_node(SUCC_BLKP(bp));    // free 상태였던 직후 블록을 free list에서 제거한다.
         size += GET_SIZE(HDRP(SUCC_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
@@ -249,7 +251,7 @@ static void* coalesce(void* bp){
 
     // case 3 : 직전 블록 가용, 직후 블록 할당
     else if(!prev_alloc && next_alloc){
-        removeBlock(PREC_BLKP(bp));    // 직전 블록을 free list에서 제거한다.
+        delete_node(PREC_BLKP(bp));    // 직전 블록을 free list에서 제거한다.
         size += GET_SIZE(HDRP(PREC_BLKP(bp)));
         bp = PREC_BLKP(bp); 
         PUT(HDRP(bp), PACK(size, 0));
@@ -258,8 +260,8 @@ static void* coalesce(void* bp){
 
     // case 4 : 직전, 직후 블록 모두 가용
     else if (!prev_alloc && !next_alloc) {
-        removeBlock(PREC_BLKP(bp));
-        removeBlock(SUCC_BLKP(bp));
+        delete_node(PREC_BLKP(bp));
+        delete_node(SUCC_BLKP(bp));
         size += GET_SIZE(HDRP(PREC_BLKP(bp))) + GET_SIZE(FTRP(SUCC_BLKP(bp)));
         bp = PREC_BLKP(bp);
         PUT(HDRP(bp), PACK(size, 0));  
@@ -267,7 +269,7 @@ static void* coalesce(void* bp){
     }
 
     // 연결된 새 가용 블록을 free list에 추가한다.
-    putFreeBlock(bp);
+    insert_node(bp);
 
 #ifdef NEXT_FIT
     if ((last_bp > (char *)bp) && (last_bp < (char *)SUCC_BLKP(bp))) 
@@ -293,13 +295,37 @@ void mm_free(void *bp)
 }
 
 /*
-    putFreeBlock(bp) : 새로 반환되거나 생성된 가용 블록을 free list의 첫 부분에 넣는다.
+    insert_node(bp) : 새로 반환되거나 생성된 가용 블록을 free list 에 넣는다.
 */
-void putFreeBlock(void* bp){
+void insert_node(void* bp){
+#ifdef INSERT_LIFO    
+    /* LIFO */
     NEXT_FREEP(bp) = free_listp;
     PREV_FREEP(bp) = NULL;
     PREV_FREEP(free_listp) = bp;
     free_listp = bp;
+#else
+    /* address order */
+    void *curr = free_listp;
+    void *saved = curr;
+    void *prev = NULL;
+    while (curr != NULL && bp < curr) {
+        prev = PREV_FREEP(curr);
+        saved = curr;
+        curr = NEXT_FREEP(curr);
+    }
+    
+    SET_PREV_FREE(bp, prev);
+    SET_NEXT_FREE(bp, saved);
+    if (prev != NULL) {
+        SET_NEXT_FREE(prev, bp);
+    } else { 
+        free_listp = bp;/* Insert bp before current free list head*/
+    }
+    if (saved != NULL) {
+        SET_PREV_FREE(saved, bp);
+    }
+#endif
 }
 
 /*
@@ -328,9 +354,9 @@ void *mm_realloc(void *ptr, size_t size)
 }
 
 /*
-    removeBlock(bp) : 할당되거나 연결되는 가용 블록을 free list에서 없앤다.
+    delete_node(bp) : 할당되거나 연결되는 가용 블록을 free list에서 없앤다.
 */
-void removeBlock(void *bp){
+void delete_node(void *bp){
     // // free list의 첫번째 블록을 없앨 때
     // if (bp == free_listp){
     //     PREV_FREEP(NEXT_FREEP(bp)) = NULL;
