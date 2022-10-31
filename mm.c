@@ -333,6 +333,10 @@ void insert_node(void* bp){
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+    if (size == 0) {
+        mm_free(ptr);
+        return;
+    }
     void *oldptr = ptr;  // 크기를 조절하고 싶은 힙의 시작 포인터
     void *newptr;        // 크기 조절 뒤의 새 힙의 시작 포인터
     size_t copySize;     // 복사할 힙의 크기
