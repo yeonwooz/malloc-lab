@@ -60,6 +60,10 @@ team_t team = {
 #define PREV_FREEP(bp)  (*(void**)(bp))  
 #define NEXT_FREEP(bp)  (*(void**)(bp + WSIZE))
 
+#define SET_PREV_FREE(bp, prev) (*((void **)(bp)) = prev) /* Given block pointers ptr and prev, set the PREV pointer of ptr to *prev. */
+#define SET_NEXT_FREE(bp, next) (*((void **)(bp + WSIZE)) = next) /* Given block pointers ptr and next, set the NEXT pointer of ptr to next*/
+
+
 /* free 블록은 이중연결리스트로 관리하며 prev, next 가 있지만 allocated 블록에는 헤더와 푸터만 있다.*/
 static char *heap_listp = NULL; // 힙의 프롤로그 블록을 가리키는 정적변수 포인터
 static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정적변수 포인터
@@ -327,14 +331,26 @@ void *mm_realloc(void *ptr, size_t size)
     removeBlock(bp) : 할당되거나 연결되는 가용 블록을 free list에서 없앤다.
 */
 void removeBlock(void *bp){
-    // free list의 첫번째 블록을 없앨 때
-    if (bp == free_listp){
-        PREV_FREEP(NEXT_FREEP(bp)) = NULL;
-        free_listp = NEXT_FREEP(bp);
+    // // free list의 첫번째 블록을 없앨 때
+    // if (bp == free_listp){
+    //     PREV_FREEP(NEXT_FREEP(bp)) = NULL;
+    //     free_listp = NEXT_FREEP(bp);
+    // }
+    // // free list 안에서 없앨 때
+    // else{
+    //     NEXT_FREEP(PREV_FREEP(bp)) = NEXT_FREEP(bp);
+    //     PREV_FREEP(NEXT_FREEP(bp)) = PREV_FREEP(bp);
+    // }
+
+    void *next = (void *) NEXT_FREEP(bp);
+    void *prev = (void *) PREV_FREEP(bp);
+    if (prev == NULL) { /* Start of the list */
+        free_listp = next;
+    } else {
+        SET_NEXT_FREE(prev, next);
     }
-    // free list 안에서 없앨 때
-    else{
-        NEXT_FREEP(PREV_FREEP(bp)) = NEXT_FREEP(bp);
-        PREV_FREEP(NEXT_FREEP(bp)) = PREV_FREEP(bp);
+    
+    if (next != NULL) { /* Not the end of list */
+        SET_PREV_FREE(next, prev);
     }
 }
