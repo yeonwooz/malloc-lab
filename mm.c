@@ -113,9 +113,6 @@ int mm_init(void)
 #ifdef NEXT_FIT
     last_bp = heap_listp;
 #endif
-    if (extend_heap(4) == NULL) {
-        return -1;
-    }
     // 초기 가용블록 생성 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) //실패하면 -1 리턴
         return -1;
