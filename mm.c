@@ -70,7 +70,7 @@ static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정�
 
 #define INSERT_LIFO
 
-#define NEXT_FIT
+// #define NEXT_FIT
 
 #ifdef NEXT_FIT
     static char *last_bp;
@@ -113,7 +113,9 @@ int mm_init(void)
 #ifdef NEXT_FIT
     last_bp = heap_listp;
 #endif
-
+    if (extend_heap(4) == NULL) {
+        return -1;
+    }
     // 초기 가용블록 생성 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) //실패하면 -1 리턴
         return -1;
