@@ -287,7 +287,7 @@ static void *place(void *ptr, size_t asize)
         PUT(FTRP(ptr), PACK(ptr_size, 1)); 
     }
     
-    else if (asize >= 100) {   //  새로 배치해야하는 공간크기가 realloc buffer 넘어선다면? => 다음블록에서 배치 (현재블록은 가용블록으로 유지)
+    else if (asize >= 100) { 
         // Split block
         PUT(HDRP(ptr), PACK(remainder, 0));
         PUT(FTRP(ptr), PACK(remainder, 0));
@@ -295,10 +295,9 @@ static void *place(void *ptr, size_t asize)
         PUT(FTRP(NEXT_BLKP(ptr)), PACK(asize, 1));
         insert_node(ptr, remainder);
         return NEXT_BLKP(ptr);
-        
     }
     
-    else {  // 새로 배치해야하는 공간크기가 realloc buffer 안에 있다면? => ptr 을 place
+    else { 
         // Split block
         PUT(HDRP(ptr), PACK(asize, 1)); 
         PUT(FTRP(ptr), PACK(asize, 1)); 
