@@ -36,7 +36,7 @@
 #define CHUNKSIZE (1<<12)//+(1<<7) 
 
 #define LISTLIMIT     20      
-#define REALLOC_BUFFER  (1<<7)    
+// #define REALLOC_BUFFER  1<<7 // 불필요 --
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y)) 
 #define MIN(x, y) ((x) < (y) ? (x) : (y)) 
@@ -368,7 +368,7 @@ int mm_init(void)
  * Role : 
  * 1. The mm_malloc routine returns a pointer to an allocated block payload.
  * 2. The entire allocated block should lie within the heap region.
- * 3. The entire allocated block should overlap with any other chunk.
+ * 3. The entire allocated block should (not..?) overlap with any other chunk.
  * 
  * Return value : Always return the payload pointers that are alligned to 8 bytes.
  */
@@ -397,10 +397,13 @@ void *mm_malloc(size_t size)
             // 리스트의 맨 끝이거나, (할당받고자 하는 사이즈가 1보다 작으면서 seglist의 현재인덱스 길이 클래스의 가용리스트가 있으면)
             ptr = segregated_free_lists[list];
             // ptr에 현재 길이 클래스 가용리스트를 준다.
+
             // Ignore blocks that are too small or marked with the reallocation bit
-            while ((ptr != NULL) && ((asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))))
+            while ((ptr != NULL) && (   (asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))  ))
             {
-                ptr = PRED(ptr);
+                // ptr이 NULL이 아니면서, 원하는 asize가 현재블록보다 크거나()
+                // ptr이 NULL이 아니면서, 현재블록에 RATAG가 있을 때(재할당태그가 붙어있으면 그 PRED를 할당)
+                ptr = PRED(ptr);  // 오름차순이므로 PRED는 현재 클래스의 선행 블록이라서 크기가 작다. 
             }
             if (ptr != NULL)
                 break;
@@ -437,7 +440,7 @@ void mm_free(void *ptr)
 {
     size_t size = GET_SIZE(HDRP(ptr));
  
-    REMOVE_RATAG(HDRP(NEXT_BLKP(ptr)));  //  what about current tag,,,,?
+    REMOVE_RATAG(HDRP(NEXT_BLKP(ptr)));  // 현재 블록을 free할 때는, 그 물리적 인접 다음 블록이 RATAG가 있을 거라서, 없애줘라 
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     
@@ -476,29 +479,27 @@ void *mm_realloc(void *ptr, size_t size)
         new_size = ALIGN(size+DSIZE);
     }
     
-    /* Add overhead requirements to block size */
-    new_size += REALLOC_BUFFER;
+    /* Add overhead requirements to block size */  // 오버헤드 = 충분한 버퍼
+    // new_size += REALLOC_BUFFER;
     
     /* Calculate block buffer */
     block_buffer = GET_SIZE(HDRP(ptr)) - new_size; //   block_buffer = (현재블록 사이즈)에서 (new_size)를 뺀 크기
     /*
-    //=> 1. 현재 ptr블록이 요청받은 new_size 보다 작아서 block_buffer가 음수가 됨 
+    //=> 1. 현재 ptr블록이 요청받은 new_size 보다 작다면 block_buffer < 0
     //=> 2. 현재 ptr블록이 요청받은 new_size랑 딱 맞는다면 =>  block_buffer = 0
-    //=> 3. 현재 ptr블록이 요청받은 new_size보다 한~~~참 크다면 =>  block_buffer > 0 (굉장히 큰 어떤 값) => block_buffer >= 2 * REALLOC_BUFFER 라면.. 514라인 거짓
+    //=> 3. 현재 ptr블록이 요청받은 new_size보다 한참 크다면 => block_buffer > 0
     
     <1번>
         GET_SIZE(HDRP(ptr) = 8 * 10 + 2^7 - 1 = 207
         new_size = 8 * 10 + 2^7 = 208
         block_buffer = -1
 
-
     <2번>
         GET_SIZE(HDRP(ptr) = 8 * 10 + 2^7 = 208
         new_size = 8 * 10 + 2^7 = 208
         block_buffer = 0
 
-
-    <3번>
+    <3번이면서 엄청 큼>
         GET_SIZE(HDRP(ptr) = 8 * 10 + 640 = 720
         new_size = 8 * 10 + 2^7 = 208
         block_buffer = 2^9
@@ -512,14 +513,6 @@ void *mm_realloc(void *ptr, size_t size)
 
     /* Allocate more space if overhead falls below the minimum */
     if (block_buffer < 0) {
-        /*
-        예)
-            GET_SIZE(HDRP(ptr) = 8 * 10 + 2^7 - 1 = 207
-            new_size = 8 * 10 + 2^7 = 208
-            block_buffer = -1
-        */
-
-
         /* Check if next block is a free block or the epilogue block */
         if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !GET_SIZE(HDRP(NEXT_BLKP(ptr)))) {
             // 물리적 인접블록(cur + next)을 바로 할당 가능할 때 
@@ -559,21 +552,19 @@ void *mm_realloc(void *ptr, size_t size)
     
     // 508라인까지의 과정을 안 거친다면, 514라인이 거짓일 수도 있다?
     // Tag the next block if block overhead drops below twice the overhead 
-    if (block_buffer < 2 * REALLOC_BUFFER)   
-        // 1,2번 케이스에 해당
-        SET_RATAG(HDRP(NEXT_BLKP(new_ptr)));
+    // if (block_buffer < 0)   
+        // 1,2번 케이스, 그리고 만약 block_buffer가 양수일 경우에도 REALLOC_BUFFER * 2보다는 작을 수 있다.
+    SET_RATAG(HDRP(NEXT_BLKP(new_ptr)));
 
     /*
-    else는 3번케이스에 해당
+    else는 3번케이스(shrink)에 해당
         현재블록 사이즈 = 8 * 10 + 640 = 720
         new_size = 8 * 10 + 2^7 = 208
         block_buffer = 2^9
         일 때, 재할당 태그가 붙지 않는다.  => 다음블록을 free할 때, 그 다음블록이랑 coalesce 할 수 있다!
-    
     */
 
 
-    
     // Return the reallocated block 
     return new_ptr;
 }
