@@ -46,8 +46,7 @@
 
 // Read and write a word at address p 
 #define GET(p)            (*(unsigned int *)(p))
-#define PUT(p, val)       (*(unsigned int *)(p) = (val) | GET_TAG(p))
-#define PUT_NOTAG(p, val) (*(unsigned int *)(p) = (val))
+#define PUT(p, val)       (*(unsigned int *)(p) = (val))
 
 // Store predecessor or successor pointer for free blocks 
 #define SET_PTR(p, ptr) (*(unsigned int *)(p) = (unsigned int)(ptr))
@@ -55,9 +54,6 @@
 // Read the size and allocation bit from address p 
 #define GET_SIZE(p)  (GET(p) & ~0x7)
 #define GET_ALLOC(p) (GET(p) & 0x1)  // 1이 할당 0이 free
-#define GET_TAG(p)   (GET(p) & 0x2)
-#define SET_RATAG(p)   (GET(p) |= 0x2)
-#define REMOVE_RATAG(p) (GET(p) &= ~0x2)
 
 // Address of block's header and footer 
 #define HDRP(ptr) ((char *)(ptr) - WSIZE)
@@ -156,9 +152,9 @@ static void *extend_heap(size_t size)
         return NULL;
     
     // Set headers and footer 
-    PUT_NOTAG(HDRP(ptr), PACK(asize, 0));  
-    PUT_NOTAG(FTRP(ptr), PACK(asize, 0));   
-    PUT_NOTAG(HDRP(NEXT_BLKP(ptr)), PACK(0, 1)); 
+    PUT(HDRP(ptr), PACK(asize, 0));  
+    PUT(FTRP(ptr), PACK(asize, 0));   
+    PUT(HDRP(NEXT_BLKP(ptr)), PACK(0, 1)); 
     insert_node(ptr, asize);
 
     return coalesce(ptr);
@@ -247,11 +243,6 @@ static void *coalesce(void *ptr)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
     size_t size = GET_SIZE(HDRP(ptr));
     
-
-    // Do not coalesce with previous block if the previous block is tagged with Reallocation tag
-    if (GET_TAG(HDRP(PREV_BLKP(ptr))))
-        prev_alloc = 1;
-
     if (prev_alloc && next_alloc) {                         // Case 1
         return ptr;
     }
@@ -301,8 +292,8 @@ static void *place(void *ptr, size_t asize)
         // Split block
         PUT(HDRP(ptr), PACK(remainder, 0));
         PUT(FTRP(ptr), PACK(remainder, 0));
-        PUT_NOTAG(HDRP(NEXT_BLKP(ptr)), PACK(asize, 1));
-        PUT_NOTAG(FTRP(NEXT_BLKP(ptr)), PACK(asize, 1));
+        PUT(HDRP(NEXT_BLKP(ptr)), PACK(asize, 1));
+        PUT(FTRP(NEXT_BLKP(ptr)), PACK(asize, 1));
         insert_node(ptr, remainder);
         return NEXT_BLKP(ptr);
         
@@ -312,8 +303,8 @@ static void *place(void *ptr, size_t asize)
         // Split block
         PUT(HDRP(ptr), PACK(asize, 1)); 
         PUT(FTRP(ptr), PACK(asize, 1)); 
-        PUT_NOTAG(HDRP(NEXT_BLKP(ptr)), PACK(remainder, 0)); 
-        PUT_NOTAG(FTRP(NEXT_BLKP(ptr)), PACK(remainder, 0)); 
+        PUT(HDRP(NEXT_BLKP(ptr)), PACK(remainder, 0)); 
+        PUT(FTRP(NEXT_BLKP(ptr)), PACK(remainder, 0)); 
         insert_node(NEXT_BLKP(ptr), remainder);
     }
     return ptr;
@@ -350,10 +341,10 @@ int mm_init(void)
     if ((long)(heap_start = mem_sbrk(4 * WSIZE)) == -1)
         return -1;
     
-    PUT_NOTAG(heap_start, 0);                            /* Alignment padding */
-    PUT_NOTAG(heap_start + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */
-    PUT_NOTAG(heap_start + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
-    PUT_NOTAG(heap_start + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
+    PUT(heap_start, 0);                            /* Alignment padding */
+    PUT(heap_start + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */
+    PUT(heap_start + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
+    PUT(heap_start + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
     
     if (extend_heap(INITCHUNKSIZE) == NULL)
         return -1;
@@ -399,7 +390,7 @@ void *mm_malloc(size_t size)
             // ptr에 현재 길이 클래스 가용리스트를 준다.
 
             // Ignore blocks that are too small or marked with the reallocation bit
-            while ((ptr != NULL) && (   (asize > GET_SIZE(HDRP(ptr))) || (GET_TAG(HDRP(ptr)))  ))
+            while ((ptr != NULL) && (   (asize > GET_SIZE(HDRP(ptr)))))
             {
                 // ptr이 NULL이 아니면서, 원하는 asize가 현재블록보다 크거나()
                 // ptr이 NULL이 아니면서, 현재블록에 RATAG가 있을 때(재할당태그가 붙어있으면 그 PRED를 할당)
@@ -440,7 +431,6 @@ void mm_free(void *ptr)
 {
     size_t size = GET_SIZE(HDRP(ptr));
  
-    REMOVE_RATAG(HDRP(NEXT_BLKP(ptr)));  // 현재 블록을 free할 때는, 그 물리적 인접 다음 블록이 RATAG가 있을 거라서, 없애줘라 
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     
@@ -456,7 +446,6 @@ void mm_free(void *ptr)
  * Role : The mm_realloc routine returns a pointer to an allocated 
  *        region of at least size bytes with constraints.
  *
- *  I used https://github.com/htian/malloc-lab/blob/master/mm.c source idea to maximize utilization
  *  by using reallocation tags
  *  in reallocation cases (realloc-bal.rep, realloc2-bal.rep)
  */
@@ -479,91 +468,35 @@ void *mm_realloc(void *ptr, size_t size)
         new_size = ALIGN(size+DSIZE);
     }
     
-    /* Add overhead requirements to block size */  // 오버헤드 = 충분한 버퍼
-    // new_size += REALLOC_BUFFER;
-    
     /* Calculate block buffer */
-    block_buffer = GET_SIZE(HDRP(ptr)) - new_size; //   block_buffer = (현재블록 사이즈)에서 (new_size)를 뺀 크기
-    /*
-    //=> 1. 현재 ptr블록이 요청받은 new_size 보다 작다면 block_buffer < 0
-    //=> 2. 현재 ptr블록이 요청받은 new_size랑 딱 맞는다면 =>  block_buffer = 0
-    //=> 3. 현재 ptr블록이 요청받은 new_size보다 한참 크다면 => block_buffer > 0
-    
-    <1번>
-        GET_SIZE(HDRP(ptr) = 8 * 10 + 2^7 - 1 = 207
-        new_size = 8 * 10 + 2^7 = 208
-        block_buffer = -1
-
-    <2번>
-        GET_SIZE(HDRP(ptr) = 8 * 10 + 2^7 = 208
-        new_size = 8 * 10 + 2^7 = 208
-        block_buffer = 0
-
-    <3번이면서 엄청 큼>
-        GET_SIZE(HDRP(ptr) = 8 * 10 + 640 = 720
-        new_size = 8 * 10 + 2^7 = 208
-        block_buffer = 2^9
-        
-        (b.b = 2^9 일 때,  
-        new_size = 8x + 2^7
-
-        2^9 = (현재블록 사이즈) - (8x + 2^7)
-        => (현재블록 사이즈) = 8x + 640   => 8 * 10 + 640)
-    */
+    block_buffer = GET_SIZE(HDRP(ptr)) - new_size;
 
     /* Allocate more space if overhead falls below the minimum */
     if (block_buffer < 0) {
         /* Check if next block is a free block or the epilogue block */
         if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !GET_SIZE(HDRP(NEXT_BLKP(ptr)))) {
-            // 물리적 인접블록(cur + next)을 바로 할당 가능할 때 
             remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr))) - new_size;
-            // remainder = 207 + 0 - 208 
-            // => remainder = -1
             if (remainder < 0) {
                 // 추가 공간 필요
                 extendsize = MAX(-remainder, CHUNKSIZE);
                 if (extend_heap(extendsize) == NULL)
                     return NULL;
                 remainder += extendsize;
-                // remainder = -1 + (2^12)
+
             }
             
             delete_node(NEXT_BLKP(ptr));   // 스플릿된 채 가용리스트에 들어있는 next는 삭제
             
             // Do not split block
-            PUT_NOTAG(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
-            PUT_NOTAG(FTRP(ptr), PACK(new_size + remainder, 1)); 
+            PUT(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
+            PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
         } else {
-            // 현재 ptr 과 원하는 사이즈를 malloc요청하면 인접 다음블록이 아니라 seglist 에서 꺼내서 size만큼 할당시켜온다. 그러므로 new_size - DSIZE가 커도 노상관. 
-            new_ptr = mm_malloc(new_size - DSIZE);  // 새로운 포인터로 바뀐다. 
-            memcpy(new_ptr, ptr, MIN(size, new_size));   // realloc 사이즈의 리밋을 거는 것.. 을 왜 함?
+            new_ptr = mm_malloc(new_size - DSIZE);  
+            memcpy(new_ptr, ptr, size); 
             mm_free(ptr);
         }
         block_buffer = GET_SIZE(HDRP(new_ptr)) - new_size;   // block_buffer 갱신
-        /*
-            만약에 if를 타고 왔다
-                block_buffer = remainder = -1 + (2^12)
-                (새 할당공간) - (실제 할당공간)
-
-            만약에 else를 타고 왔다
-                block_buffer = 0  => 딱 맞음 
-        */
     }
-    
-    // 508라인까지의 과정을 안 거친다면, 514라인이 거짓일 수도 있다?
-    // Tag the next block if block overhead drops below twice the overhead 
-    // if (block_buffer < 0)   
-        // 1,2번 케이스, 그리고 만약 block_buffer가 양수일 경우에도 REALLOC_BUFFER * 2보다는 작을 수 있다.
-    SET_RATAG(HDRP(NEXT_BLKP(new_ptr)));
-
-    /*
-    else는 3번케이스(shrink)에 해당
-        현재블록 사이즈 = 8 * 10 + 640 = 720
-        new_size = 8 * 10 + 2^7 = 208
-        block_buffer = 2^9
-        일 때, 재할당 태그가 붙지 않는다.  => 다음블록을 free할 때, 그 다음블록이랑 coalesce 할 수 있다!
-    */
-
 
     // Return the reallocated block 
     return new_ptr;
