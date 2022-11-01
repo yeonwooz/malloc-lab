@@ -35,7 +35,7 @@
 #define INITCHUNKSIZE (1<<6)
 #define CHUNKSIZE (1<<12)//+(1<<7) 
 
-#define LISTLIMIT     20      
+#define LISTLIMIT     20    
 // #define REALLOC_BUFFER  1<<7 // 불필요 --
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y)) 
@@ -275,11 +275,22 @@ static void *coalesce(void *ptr)
 
 static void *place(void *ptr, size_t asize)
 {
+
     size_t ptr_size = GET_SIZE(HDRP(ptr));
     size_t remainder = ptr_size - asize;
+    // ptr_size = 2^12 - 20
+    // asize = 120
+    // remainder = 2^12 - 140
     
     delete_node(ptr);
-    
+
+    /*
+        split할 때 aszie 기준 최적은 73부터이고,  120 초과시 core dumped error 발생. 
+        asize가 120이면, 
+        remainder = ptr_size - 120
+        ptr_size는 120이상일 것이다 (seglist에서 찾아왔으므로)
+        remainder는 0이상일 것이다 
+    */
     
     if (remainder <= DSIZE * 2) {
         // Do not split block 
@@ -287,10 +298,14 @@ static void *place(void *ptr, size_t asize)
         PUT(FTRP(ptr), PACK(ptr_size, 1)); 
     }
     
-    else if (asize >= 100) { 
+    else if (asize >= 120) { 
+        // from 73 ~ 120
+        // 2^6 + 8 + 1 ~ 2^7 - 8
+
         // Split block
-        PUT(HDRP(ptr), PACK(remainder, 0));
+        PUT(HDRP(ptr), PACK(remainder, 0));  // remainder = 2^12 - 140
         PUT(FTRP(ptr), PACK(remainder, 0));
+
         PUT(HDRP(NEXT_BLKP(ptr)), PACK(asize, 1));
         PUT(FTRP(NEXT_BLKP(ptr)), PACK(asize, 1));
         insert_node(ptr, remainder);
@@ -299,6 +314,7 @@ static void *place(void *ptr, size_t asize)
     
     else { 
         // Split block
+        // asize=24 요청받았다 => 현재블록할당, 다음블록을 가용리스트에 추가 
         PUT(HDRP(ptr), PACK(asize, 1)); 
         PUT(FTRP(ptr), PACK(asize, 1)); 
         PUT(HDRP(NEXT_BLKP(ptr)), PACK(remainder, 0)); 
@@ -376,6 +392,7 @@ void *mm_malloc(size_t size)
         asize = 2 * DSIZE;
     } else {
         asize = ALIGN(size+DSIZE);
+        // size = 112일 때 => asize = 120
     }
     
     int list = 0; 
@@ -404,7 +421,7 @@ void *mm_malloc(size_t size)
     
     // if free block is not found, extend the heap
     if (ptr == NULL) {
-        extendsize = MAX(asize, CHUNKSIZE);
+        extendsize = MAX(asize, CHUNKSIZE);   // CHUNKSIZE = 2^12 => extend
         
         if ((ptr = extend_heap(extendsize)) == NULL)
             return NULL;
@@ -412,7 +429,6 @@ void *mm_malloc(size_t size)
     
     // Place and divide block
     ptr = place(ptr, asize);
-    
     
     // Return pointer to newly allocated block 
     return ptr;
