@@ -39,7 +39,6 @@
 // #define REALLOC_BUFFER  1<<7 // 불필요 --
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y)) 
-#define MIN(x, y) ((x) < (y) ? (x) : (y)) 
 
 // Pack a size and allocated bit into a word
 #define PACK(size, alloc) ((size) | (alloc))
@@ -446,7 +445,6 @@ void mm_free(void *ptr)
  * Role : The mm_realloc routine returns a pointer to an allocated 
  *        region of at least size bytes with constraints.
  *
- *  by using reallocation tags
  *  in reallocation cases (realloc-bal.rep, realloc2-bal.rep)
  */
 void *mm_realloc(void *ptr, size_t size)
@@ -455,7 +453,6 @@ void *mm_realloc(void *ptr, size_t size)
     size_t new_size = size; /* Size of new block */
     int remainder;          /* Adequacy of block sizes */
     int extendsize;         /* Size of heap extension */
-    int block_buffer;       /* Size of block buffer */
     
     // Ignore size 0 cases
     if (size == 0)
@@ -467,35 +464,29 @@ void *mm_realloc(void *ptr, size_t size)
     } else {
         new_size = ALIGN(size+DSIZE);
     }
-    
-    /* Calculate block buffer */
-    block_buffer = GET_SIZE(HDRP(ptr)) - new_size;
 
     /* Allocate more space if overhead falls below the minimum */
-    if (block_buffer < 0) {
-        /* Check if next block is a free block or the epilogue block */
-        if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !GET_SIZE(HDRP(NEXT_BLKP(ptr)))) {
-            remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr))) - new_size;
-            if (remainder < 0) {
-                // 추가 공간 필요
-                extendsize = MAX(-remainder, CHUNKSIZE);
-                if (extend_heap(extendsize) == NULL)
-                    return NULL;
-                remainder += extendsize;
 
-            }
-            
-            delete_node(NEXT_BLKP(ptr));   // 스플릿된 채 가용리스트에 들어있는 next는 삭제
-            
-            // Do not split block
-            PUT(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
-            PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
-        } else {
-            new_ptr = mm_malloc(new_size - DSIZE);  
-            memcpy(new_ptr, ptr, size); 
-            mm_free(ptr);
+    /* Check if next block is a free block or the epilogue block */
+    if (!GET_ALLOC(HDRP(NEXT_BLKP(ptr))) || !GET_SIZE(HDRP(NEXT_BLKP(ptr)))) {
+        remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(NEXT_BLKP(ptr))) - new_size;
+        if (remainder < 0) {
+            // 추가 공간 필요
+            extendsize = MAX(-remainder, CHUNKSIZE);
+            if (extend_heap(extendsize) == NULL)
+                return NULL;
+            remainder += extendsize;
         }
-        block_buffer = GET_SIZE(HDRP(new_ptr)) - new_size;   // block_buffer 갱신
+        
+        delete_node(NEXT_BLKP(ptr));   // 스플릿된 채 가용리스트에 들어있는 next는 삭제
+        
+        // Do not split block
+        PUT(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
+        PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
+    } else {
+        new_ptr = mm_malloc(new_size - DSIZE);  
+        memcpy(new_ptr, ptr, size); 
+        mm_free(ptr);
     }
 
     // Return the reallocated block 
