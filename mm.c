@@ -103,80 +103,6 @@ int mm_init(void);
 void *mm_malloc(size_t size);
 void mm_free(void *bp);
 void *mm_realloc(void *ptr, size_t size);
-int mm_checkheap(int lineno);
-
-#define UINT_CAST(p) ((size_t)p)
-#define DEBUG
-
-
-#ifdef DEBUG
-// #define CHECKHEAP(__LINE__)                                                 
-//     // printf("\n==heap=checker=on==\n%s : %d\n", __func__, __LINE__); 
-//     mm_checkheap(__LINE__);
-#endif
-
-int mm_checkheap(int lineno)
-{
-    char *heap_lo = mem_heap_lo();                      // pointing first word of the heap
-    char *heap_hi = heap_lo + (mem_heapsize() - WSIZE); // pointing last word of the heap
-    char *bp;
-    /* heap level check*/
-    assert(GET(heap_lo) == 0);                              // check unused
-    assert(GET(heap_lo + 1 * WSIZE) == PACK(2 * DSIZE, 1)); // check Prologue header
-    // assert(GET(heap_lo + 2*WSIZE) == 0);                   // check Prologue PRED
-    // assert(GET(heap_lo + 3*WSIZE) == 0);                   // check Prologue SUCC
-    assert(GET(heap_lo + 4 * WSIZE) == PACK(2 * DSIZE, 1)); // check Prologue footer
-    assert(GET(heap_hi) == PACK(0, 1));                     // check Epilogue block
-    printf("heap level ok\n");
-    /* block level */
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = SUCC_BLKP(bp))
-    {
-        assert(GET(HDRP(bp)) == GET(FTRP(bp)));                       // check header and footer match
-        assert(!(UINT_CAST(bp) & 0x7));                               // check if payload area aligned
-        assert(GET_ALLOC(HDRP(bp)) | GET_ALLOC(HDRP(SUCC_BLKP(bp)))); // check contiguous free blocks
-        assert(heap_lo < HDRP(bp) && FTRP(bp) < heap_hi);             // check heap bound
-        // check all free blocks are in the free list
-        if (!GET_ALLOC(HDRP(bp)))
-        {
-            void *pred_free;
-            for (pred_free = PREV_FREEP(free_listp); GET_ALLOC(HDRP(pred_free)) != 1; pred_free = PREV_FREEP(pred_free))
-            {
-                if (GET_ALLOC(HDRP(pred_free)) == 1)
-                    break;
-            }
-            assert(pred_free);
-        }
-    }
-    printf("block level ok\n");
-    // detect cycle
-    char *hare;
-    char *tortoise;
-    hare = tortoise = free_listp;
-    printf("hare : %16p, tortoise: %16p\n", hare, tortoise);
-    while (1)
-    {
-        if (GET_ALLOC(HDRP(hare)) == 1 || GET_ALLOC(HDRP(PREV_FREEP(hare))) == 1)
-            break;
-        hare = PREV_FREEP(PREV_FREEP(hare));
-        tortoise = PREV_FREEP(tortoise);
-        printf("hare : %16p, tortoise: %16p\n", hare, tortoise);
-        assert(hare != tortoise);
-    }
-    printf("cycle check ok\n");
-    printf("\n=======done=======\n");
-    // /* list level check */
-    // printf(“<<free block list>>\n”);
-    // void * free = root;
-    // void * next_free = (void *)GET(NEXT_FREE(root));
-    // while (next_free != NULL) {
-    //     printf(“free : %p, next free : %p\n”, free, next_free);
-    //     assert(!GET_ALLOC(HDRP(next_free)));
-    //     assert(free < next_free);
-    //     free = next_free;
-    //     next_free = (void *)GET(NEXT_FREE(next_free));
-    // }
-    return 1;
-}
 
 /* 
  * mm_init 
@@ -474,16 +400,76 @@ void insert_node(void* bp){
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+    void *new_ptr = ptr;    /* Pointer to be returned */
+    size_t new_size = size; /* Size of new block */
+    int remainder;          /* Adequacy of block sizes */
+    int extendsize;         /* Size of heap extension */
+
+
+    // Ignore size 0 cases
     if (size == 0) {
         mm_free(ptr);
-        return;
+        return NULL;
     }
-    void *oldptr = ptr;  // 크기를 조절하고 싶은 힙의 시작 포인터
-    void *newptr;        // 크기 조절 뒤의 새 힙의 시작 포인터
+#ifdef NEXT_FIT   
+    // Align block size
+    if (new_size <= DSIZE) {
+        new_size = 2 * DSIZE;
+    } else {
+        new_size = ALIGN(size+DSIZE);
+    }
+
+    remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(SUCC_BLKP(ptr))) - new_size;
+
+    // /* 다음 블록이 에필로그 블록 ( if SUCCESSOR is epilogue ) */
+    if  (!GET_SIZE(HDRP(SUCC_BLKP(ptr)))) {
+        remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(SUCC_BLKP(ptr))) - new_size;
+        if (remainder < 0) {
+            // 추가 공간 필요
+            extendsize = MAX(-remainder, CHUNKSIZE);
+            if (extend_heap(extendsize) == NULL)
+                return NULL;
+            remainder += extendsize;
+        }
+        new_ptr = mm_malloc(new_size - DSIZE);  
+        memcpy(new_ptr, ptr, size); 
+        mm_free(ptr);
+    }
+
+    /* 다음 블록이 free 임 */
+    else if (!GET_ALLOC(HDRP(SUCC_BLKP(ptr)))) {
+        if (remainder < 0) {
+            // 추가 공간 필요
+            extendsize = MAX(-remainder, CHUNKSIZE);
+            if (extend_heap(extendsize) == NULL)
+                return NULL;
+            remainder += extendsize;
+        } 
+        else if (remainder >= 24) {
+            delete_node(SUCC_BLKP(ptr));
+            PUT(HDRP(ptr), PACK(new_size, 1)); 
+            PUT(FTRP(ptr), PACK(new_size, 1)); 
+            PUT(HDRP(SUCC_BLKP(ptr)), PACK(remainder, 0)); 
+            PUT(FTRP(SUCC_BLKP(ptr)), PACK(remainder, 0)); 
+            insert_node(SUCC_BLKP(ptr));
+            return ptr;
+        } 
+        delete_node(SUCC_BLKP(ptr));   // 스플릿된 채 가용리스트에 들어있는 next는 삭제
+        
+        // Do not split block
+        PUT(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
+        PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
+    } else {
+        new_ptr = mm_malloc(new_size - DSIZE);  
+        memcpy(new_ptr, ptr, size); 
+        mm_free(ptr);
+    }
+#else
+    void *oldptr = ptr; 
     size_t copySize;     // 복사할 힙의 크기
     
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
+    new_ptr = mm_malloc(size);
+    if (new_ptr == NULL)
       return NULL;
 
     // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
@@ -493,9 +479,11 @@ void *mm_realloc(void *ptr, size_t size)
     if (size < copySize)
       copySize = size;
 
-    memcpy(newptr, oldptr, copySize);  // newptr에 oldptr를 시작으로 copySize만큼의 메모리 값을 복사한다
+    memcpy(new_ptr, oldptr, copySize);  // newptr에 oldptr를 시작으로 copySize만큼의 메모리 값을 복사한다
     mm_free(oldptr);  // 기존의 힙을 반환한다.
-    return newptr;
+#endif
+    // Return the reallocated block 
+    return new_ptr;
 }
 
 /*
