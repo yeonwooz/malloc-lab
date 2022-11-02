@@ -70,7 +70,7 @@ static char *free_listp = NULL; // free list 의 첫 블록을 가리키는 정�
 
 #define INSERT_LIFO
 
-// #define NEXT_FIT
+#define NEXT_FIT
 
 #ifdef NEXT_FIT
     static char *last_bp;
