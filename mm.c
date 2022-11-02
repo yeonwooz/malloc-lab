@@ -103,6 +103,80 @@ int mm_init(void);
 void *mm_malloc(size_t size);
 void mm_free(void *bp);
 void *mm_realloc(void *ptr, size_t size);
+int mm_checkheap(int lineno);
+
+#define UINT_CAST(p) ((size_t)p)
+#define DEBUG
+
+
+#ifdef DEBUG
+// #define CHECKHEAP(__LINE__)                                                 
+//     // printf("\n==heap=checker=on==\n%s : %d\n", __func__, __LINE__); 
+//     mm_checkheap(__LINE__);
+#endif
+
+int mm_checkheap(int lineno)
+{
+    char *heap_lo = mem_heap_lo();                      // pointing first word of the heap
+    char *heap_hi = heap_lo + (mem_heapsize() - WSIZE); // pointing last word of the heap
+    char *bp;
+    /* heap level check*/
+    assert(GET(heap_lo) == 0);                              // check unused
+    assert(GET(heap_lo + 1 * WSIZE) == PACK(2 * DSIZE, 1)); // check Prologue header
+    // assert(GET(heap_lo + 2*WSIZE) == 0);                   // check Prologue PRED
+    // assert(GET(heap_lo + 3*WSIZE) == 0);                   // check Prologue SUCC
+    assert(GET(heap_lo + 4 * WSIZE) == PACK(2 * DSIZE, 1)); // check Prologue footer
+    assert(GET(heap_hi) == PACK(0, 1));                     // check Epilogue block
+    printf("heap level ok\n");
+    /* block level */
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = SUCC_BLKP(bp))
+    {
+        assert(GET(HDRP(bp)) == GET(FTRP(bp)));                       // check header and footer match
+        assert(!(UINT_CAST(bp) & 0x7));                               // check if payload area aligned
+        assert(GET_ALLOC(HDRP(bp)) | GET_ALLOC(HDRP(SUCC_BLKP(bp)))); // check contiguous free blocks
+        assert(heap_lo < HDRP(bp) && FTRP(bp) < heap_hi);             // check heap bound
+        // check all free blocks are in the free list
+        if (!GET_ALLOC(HDRP(bp)))
+        {
+            void *pred_free;
+            for (pred_free = PREV_FREEP(free_listp); GET_ALLOC(HDRP(pred_free)) != 1; pred_free = PREV_FREEP(pred_free))
+            {
+                if (GET_ALLOC(HDRP(pred_free)) == 1)
+                    break;
+            }
+            assert(pred_free);
+        }
+    }
+    printf("block level ok\n");
+    // detect cycle
+    char *hare;
+    char *tortoise;
+    hare = tortoise = free_listp;
+    printf("hare : %16p, tortoise: %16p\n", hare, tortoise);
+    while (1)
+    {
+        if (GET_ALLOC(HDRP(hare)) == 1 || GET_ALLOC(HDRP(PREV_FREEP(hare))) == 1)
+            break;
+        hare = PREV_FREEP(PREV_FREEP(hare));
+        tortoise = PREV_FREEP(tortoise);
+        printf("hare : %16p, tortoise: %16p\n", hare, tortoise);
+        assert(hare != tortoise);
+    }
+    printf("cycle check ok\n");
+    printf("\n=======done=======\n");
+    // /* list level check */
+    // printf(“<<free block list>>\n”);
+    // void * free = root;
+    // void * next_free = (void *)GET(NEXT_FREE(root));
+    // while (next_free != NULL) {
+    //     printf(“free : %p, next free : %p\n”, free, next_free);
+    //     assert(!GET_ALLOC(HDRP(next_free)));
+    //     assert(free < next_free);
+    //     free = next_free;
+    //     next_free = (void *)GET(NEXT_FREE(next_free));
+    // }
+    return 1;
+}
 
 /* 
  * mm_init 
@@ -122,7 +196,6 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), NULL);              // prologue block NEXT =  'NULL'
     PUT(heap_listp + (4*WSIZE), PACK(MINIMUM, 1));  // prologue footer = '16'
     PUT(heap_listp + (5*WSIZE), PACK(0, 1));        // epliogue header = '1'
-
     free_listp = heap_listp + DSIZE;  // heap_listp (0) + 프롤로그 헤더 + 프롤로그 PREV가 가용블록의 시작점
     heap_listp = free_listp;
 
