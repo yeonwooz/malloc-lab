@@ -10,7 +10,7 @@
  */
 
 #define INSERT_LIFO   // LIFO (삭제시 address order)
-#define NEXT_FIT      // NEXT_FIT (삭제시 FIRST_FIT)
+// #define NEXT_FIT      // NEXT_FIT (삭제시 FIRST_FIT)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -465,22 +465,77 @@ void *mm_realloc(void *ptr, size_t size)
         mm_free(ptr);
     }
 #else
-    void *oldptr = ptr; 
-    size_t copySize;     // 복사할 힙의 크기
+    // void *oldptr = ptr; 
+    // size_t copySize;     // 복사할 힙의 크기
     
-    new_ptr = mm_malloc(size);
-    if (new_ptr == NULL)
-      return NULL;
+    // new_ptr = mm_malloc(size);
+    // if (new_ptr == NULL)
+    //   return NULL;
 
-    // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    copySize = GET_SIZE(HDRP(oldptr));
+    // // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    // copySize = GET_SIZE(HDRP(oldptr));
 
-    // 원래 메모리 크기보다 적은 크기를 realloc하면 크기에 맞는 메모리만 할당되고 나머지는 안 된다
-    if (size < copySize)
-      copySize = size;
+    // // 원래 메모리 크기보다 적은 크기를 realloc하면 크기에 맞는 메모리만 할당되고 나머지는 안 된다
+    // if (size < copySize)
+    //   copySize = size;
 
-    memcpy(new_ptr, oldptr, copySize);  // newptr에 oldptr를 시작으로 copySize만큼의 메모리 값을 복사한다
-    mm_free(oldptr);  // 기존의 힙을 반환한다.
+    // memcpy(new_ptr, oldptr, copySize);  // newptr에 oldptr를 시작으로 copySize만큼의 메모리 값을 복사한다
+    // mm_free(oldptr);  // 기존의 힙을 반환한다.
+
+ // Align block size
+    if (new_size <= DSIZE) {
+        new_size = 2 * DSIZE;
+    } else {
+        new_size = ALIGN(size+DSIZE);
+    }
+
+    remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(SUCC_BLKP(ptr))) - new_size;
+
+    // /* 다음 블록이 에필로그 블록 ( if SUCCESSOR is epilogue ) */
+    // if  (!GET_SIZE(HDRP(SUCC_BLKP(ptr)))) {
+    //     remainder = GET_SIZE(HDRP(ptr)) + GET_SIZE(HDRP(SUCC_BLKP(ptr))) - new_size;
+    //     if (remainder < 0) {
+    //         // 추가 공간 필요
+    //         extendsize = MAX(-remainder, CHUNKSIZE);
+    //         if (extend_heap(extendsize) == NULL)
+    //             return NULL;
+    //         remainder += extendsize;
+    //     }
+    //     new_ptr = mm_malloc(new_size - DSIZE);  
+    //     memcpy(new_ptr, ptr, size); 
+    //     mm_free(ptr);
+    // }
+
+    /* 다음 블록이 free 임 */
+    if (!GET_ALLOC(HDRP(SUCC_BLKP(ptr)))) {
+        if (remainder < 0) {
+            // 추가 공간 필요
+            extendsize = MAX(-remainder, CHUNKSIZE);
+            if (extend_heap(extendsize) == NULL)
+                return NULL;
+            remainder += extendsize;
+        } 
+        else if (remainder >= 1800) {
+            delete_node(SUCC_BLKP(ptr));
+            PUT(HDRP(ptr), PACK(new_size, 1)); 
+            PUT(FTRP(ptr), PACK(new_size, 1)); 
+            PUT(HDRP(SUCC_BLKP(ptr)), PACK(remainder, 0)); 
+            PUT(FTRP(SUCC_BLKP(ptr)), PACK(remainder, 0)); 
+            insert_node(SUCC_BLKP(ptr));
+            return ptr;
+        } 
+        delete_node(SUCC_BLKP(ptr));   // 스플릿된 채 가용리스트에 들어있는 next는 삭제
+        
+        // Do not split block
+        PUT(HDRP(ptr), PACK(new_size + remainder, 1)); // (ptr + next) 사이즈만큼 place!
+        PUT(FTRP(ptr), PACK(new_size + remainder, 1)); 
+    } else {
+        new_ptr = mm_malloc(new_size - DSIZE);  
+        memcpy(new_ptr, ptr, size); 
+        mm_free(ptr);
+    }
+
+
 #endif
     // Return the reallocated block 
     return new_ptr;
